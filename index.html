@@ -260,16 +260,15 @@ input[readonly], textarea[readonly] { background: #f8faf8; }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.card-en { font-size: 11px; color: var(--muted); margin-top: -3px; }
 .card-summary {
   font-size: 12px;
   color: #5d6a62;
   line-height: 1.5;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  min-height: 36px;
+  min-height: 54px;
 }
 .card-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
 .badge {
@@ -424,7 +423,7 @@ input[readonly], textarea[readonly] { background: #f8faf8; }
       <span class="brand-mark">MC</span>
       <div>
         <h1>资料库</h1>
-        <p id="brandSub">模组资料库 · 2026-11-09 20:40 · 61 条</p>
+        <p id="brandSub">模组资料库 · 2026-11-09 21:08 · 61 条</p>
       </div>
     </div>
     <div class="search-wrap">
@@ -486,13 +485,10 @@ const SITE_LABELS = {
 const state = {
   category: "", q: "", site: "", version: "", loader: "",
   sort: "created_desc", items: [], stats: {}, categories: [],
-  editMode: false, currentItemId: null,
+  editMode: false,
 };
 
 const $ = (sel) => document.querySelector(sel);
-
-const dis = () => (state.editMode ? "" : " disabled");
-const ro = () => (state.editMode ? "" : " readonly");
 
 function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (c) => (
@@ -606,16 +602,34 @@ function renderFilterOptions() {
 }
 
 /* ---------------------------------------------------------------- cards */
+const MAIN_LOADERS = ["forge", "fabric", "neoforge"];
+const TARGET_VERSIONS = ["1.20.1", "1.21.1", "26.1"];
+
+function loaderBadges(item) {
+  const has = new Set((item.loaders || []).map((l) => String(l).toLowerCase()));
+  if (MAIN_LOADERS.every((l) => has.has(l))) {
+    return `<span class="badge loader">全部支持</span>`;
+  }
+  const order = ["forge", "fabric", "neoforge", "datapack", "quilt", "minecraft"];
+  return order.filter((l) => has.has(l)).slice(0, 3)
+    .map((l) => `<span class="badge loader">${esc(loaderLabel(l))}</span>`).join("");
+}
+
+function versionBadges(item) {
+  const vs = item.mc_versions || [];
+  const present = TARGET_VERSIONS.filter((v) =>
+    vs.some((x) => x === v || (v === "26.1" && String(x).startsWith("26.1."))));
+  if (present.length === TARGET_VERSIONS.length) {
+    return `<span class="badge version">全部版本</span>`;
+  }
+  return present.slice(0, 3)
+    .map((v) => `<span class="badge version">${esc(v)}</span>`).join("");
+}
+
 function cardHtml(item) {
   const cover = item.cover
     ? `<img src="${esc(item.cover)}" alt="" loading="lazy" onerror="this.style.display='none'">`
     : `<div class="fallback">${esc((item.name || "?").slice(0, 1))}</div>`;
-  const versions = (item.mc_versions || []).slice(0, 1)
-    .map((v) => `<span class="badge version">${esc(v)}</span>`).join("");
-  const more = (item.mc_versions || []).length > 1
-    ? `<span class="badge version">+${item.mc_versions.length - 1}</span>` : "";
-  const loaders = (item.loaders || []).slice(0, 2)
-    .map((l) => `<span class="badge loader">${esc(loaderLabel(l))}</span>`).join("");
   return `
     <article class="card" data-id="${item.id}">
       <div class="card-cover">
@@ -624,11 +638,10 @@ function cardHtml(item) {
       </div>
       <div class="card-body">
         <div class="card-name">${esc(item.name || item.name_en || "未命名")}</div>
-        ${item.name_en && item.name_en !== item.name ? `<div class="card-en">${esc(item.name_en)}</div>` : ""}
         <div class="card-summary">${esc(item.summary || item.note || "")}</div>
         <div class="card-meta">
           ${TYPE_LABELS[item.type] ? `<span class="badge">${TYPE_LABELS[item.type]}</span>` : ""}
-          ${loaders}${versions}${more}
+          ${loaderBadges(item)}${versionBadges(item)}
         </div>
       </div>
     </article>`;
@@ -646,7 +659,7 @@ function renderCards() {
     grid.querySelectorAll(".card").forEach((card) => {
       card.addEventListener("click", () => {
         const item = state.items.find((x) => String(x.id) === card.dataset.id);
-        if (item) openDetail(item);
+        if (item && item.source_url) window.open(item.source_url, "_blank", "noopener");
       });
     });
   }
@@ -682,109 +695,10 @@ function openModal(html) {
 function closeModal() {
   $("#modalBackdrop").classList.add("hidden");
   $("#modal").innerHTML = "";
-  state.currentItemId = null;
 }
 
-function splitList(value) {
-  return String(value || "").split(/[,，、\s]+/).map((s) => s.trim()).filter(Boolean);
-}
-
-function openDetail(item) {
-  state.currentItemId = item.id;
-  const cover = item.cover
-    ? `<img src="${esc(item.cover)}" alt="" onerror="this.parentNode.innerHTML=''">`
-    : "";
-  openModal(`
-    <div class="modal-head">
-      <div>
-        <h2>${esc(item.name || item.name_en || "未命名")}</h2>
-        <div class="sub">${esc(SITE_LABELS[item.source_site] || item.source_site || "手动")}
-          · 抓取：${esc(item.fetch_status)} ${item.fetched_at ? "· " + esc(item.fetched_at) : ""}</div>
-      </div>
-      <button class="modal-close" id="closeBtn">×</button>
-    </div>
-    ${cover ? `<div class="modal-cover">${cover}</div>` : ""}
-    <div class="form-grid">
-      <div class="field"><label>名称</label><input id="fName" value="${esc(item.name)}"${ro()}></div>
-      <div class="field"><label>英文名</label><input id="fNameEn" value="${esc(item.name_en)}"${ro()}></div>
-      <div class="field"><label>分类</label><select id="fCategory"${dis()}>
-        ${state.categories.map((c) => `<option ${c === item.category ? "selected" : ""}>${esc(c)}</option>`).join("")}
-      </select></div>
-      <div class="field"><label>类型</label><select id="fType"${dis()}>
-        ${Object.entries(TYPE_LABELS).map(([k, v]) => `<option value="${k}" ${k === item.type ? "selected" : ""}>${v}</option>`).join("")}
-      </select></div>
-      <div class="field"><label>MC 版本（逗号分隔）</label><input id="fVersions" value="${esc((item.mc_versions || []).join(", "))}"${ro()}></div>
-      <div class="field"><label>加载器（逗号分隔）</label><input id="fLoaders" value="${esc((item.loaders || []).join(", "))}"${ro()}></div>
-      <div class="field full"><label>简介</label><textarea id="fSummary"${ro()}>${esc(item.summary)}</textarea></div>
-      <div class="field full"><label>备注</label><textarea id="fNote" placeholder="安装注意、前置、版本坑…"${ro()}>${esc(item.note)}</textarea></div>
-      <div class="field full"><label>原始链接</label><input value="${esc(item.source_url)}" readonly></div>
-    </div>
-    <div class="modal-actions">
-      ${item.source_url ? `<a class="link-btn" href="${esc(item.source_url)}" target="_blank" rel="noreferrer">打开原链接 ↗</a>` : ""}
-      <span class="spacer"></span>
-      ${state.editMode ? `
-      <button class="ghost-btn" id="refreshBtn">重新抓取</button>
-      <button class="danger-btn" id="deleteBtn">删除</button>
-      <button class="primary-btn" id="saveBtn">保存</button>` : ""}
-    </div>
-  `);
-  $("#closeBtn").onclick = closeModal;
-
-  const saveBtn = $("#saveBtn");
-  if (saveBtn) saveBtn.onclick = async () => {
-    const payload = {
-      name: $("#fName").value.trim(),
-      name_en: $("#fNameEn").value.trim(),
-      category: $("#fCategory").value,
-      type: $("#fType").value,
-      mc_versions: splitList($("#fVersions").value),
-      loaders: splitList($("#fLoaders").value),
-      summary: $("#fSummary").value.trim(),
-      note: $("#fNote").value.trim(),
-    };
-    try {
-      await api(`/api/items/${item.id}`, { method: "PATCH", body: JSON.stringify(payload) });
-      closeModal();
-      toast("已保存");
-      await loadMeta();
-      await loadItems();
-    } catch (e) { toast("保存失败：" + e.message); }
-  };
-
-  const refreshBtn = $("#refreshBtn");
-  if (refreshBtn) refreshBtn.onclick = async (e) => {
-    const btn = e.currentTarget;
-    btn.disabled = true;
-    btn.textContent = "抓取中…";
-    try {
-      const updated = await api(`/api/items/${item.id}/refresh`, { method: "POST" });
-      toast("已重新抓取");
-      await loadMeta();
-      await loadItems();
-      closeModal();
-      openDetail(updated);
-    } catch (err) {
-      toast("抓取失败：" + err.message);
-      btn.disabled = false;
-      btn.textContent = "重新抓取";
-    }
-  };
-
-  const deleteBtn = $("#deleteBtn");
-  if (deleteBtn) deleteBtn.onclick = async () => {
-    if (!confirm(`确定删除「${item.name || item.source_url}」？`)) return;
-    try {
-      await api(`/api/items/${item.id}`, { method: "DELETE" });
-      closeModal();
-      toast("已删除");
-      await loadMeta();
-      await loadItems();
-    } catch (e) { toast("删除失败：" + e.message); }
-  };
-}
 
 function openAdd() {
-  state.currentItemId = null;
   openModal(`
     <div class="modal-head">
       <div><h2>新增条目</h2><div class="sub">粘贴 mcmod / CurseForge / Modrinth 链接，自动抓取名称、简介和封面</div></div>
@@ -867,7 +781,9 @@ function openAdd() {
       toast(result.duplicate ? "已存在，已定位到该条目" : "已添加");
       await loadMeta();
       await loadItems();
-      if (result.duplicate) openDetail(result.item);
+      if (result.duplicate && result.item && result.item.source_url) {
+        window.open(result.item.source_url, "_blank", "noopener");
+      }
     } catch (err) {
       toast("保存失败：" + err.message);
       btn.disabled = false;
@@ -891,14 +807,9 @@ function updateModeUI() {
 }
 
 function toggleMode() {
-  const modalOpen = !$("#modalBackdrop").classList.contains("hidden");
-  const currentId = state.currentItemId;
   state.editMode = !state.editMode;
   updateModeUI();
-  if (modalOpen && currentId) {
-    const item = state.items.find((x) => x.id === currentId);
-    if (item) openDetail(item);
-  } else if (modalOpen && !state.editMode) {
+  if (!$("#modalBackdrop").classList.contains("hidden") && !state.editMode) {
     closeModal();
   }
 }
